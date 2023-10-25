@@ -1,0 +1,22 @@
+body {
+  margin: 0;
+  padding: 0;
+}
+
+#container {
+  position: fixed;
+  touch-action: none;
+}
+
+.message {
+  padding: 0 20px;
+  font-family: Helvetica, Arial;
+  position: fixed;
+  bottom: 0%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+p {
+  margin: 2px;
+}

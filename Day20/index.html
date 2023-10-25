@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>403 error</title>
+  <link rel="stylesheet" href="./style.css">
+
+</head>
+
+<body>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/88/three.min.js"></script>
+  <script id="vertexShader" type="x-shader/x-vertex">
+    void main() {
+        gl_Position = vec4( position, 1.0 );
+    }
+</script>
+  <script id="fragmentShader" type="x-shader/x-fragment">
+    uniform vec2 u_resolution;
+    uniform float u_time;
+    uniform vec2 u_mouse;
+  uniform sampler2D u_plate;
+  
+    const int octaves = 2;
+    const float seed = 43758.5453123;
+    const float seed2 = 73156.8473192;
+    // Epsilon value
+    const float eps = 0.005;
+  
+    // movement variables
+    vec3 movement = vec3(.0);
+
+    // Gloable variables for the raymarching algorithm.
+    const int maxIterations = 256;
+    const float stepScale = .7;
+    const float stopThreshold = 0.001;
+  
+  const float PI = 3.14159;
+  
+  
+  
+  vec3 path(float delta) {
+    return vec3(0., 0., -delta*3.);
+  }
+  
+  
+  float length2( vec2 p )
+  {
+    return sqrt( p.x*p.x + p.y*p.y );
+  }
+
+  float length6( vec2 p )
+  {
+    p = p*p*p; p = p*p;
+    return pow( p.x + p.y, 1.0/6.0 );
+  }
+
+  float length8( vec2 p )
+  {
+    p = p*p; p = p*p; p = p*p;
+    return pow( p.x + p.y, 1.0/8.0 );
+  }
+  
+  // Distance function primitives
+  // Reference: http://iquilezles.org/www/articles/distfunctions/distfunctions.htm
+  float sdBox( vec3 p, vec3 b )
+  {
+    vec3 d = abs(p) - b;
+    return min(max(d.x,max(d.y,d.z)),0.0) + length(max(d,0.0));
+  }
+  float udBox( vec3 p, vec3 b )
+  {
+    return length(max(abs(p)-b,0.0));
+  }
+  float udRoundBox( vec3 p, vec3 b, float r )
+  {
+    return length(max(abs(p)-b,0.0))-r;
+  }
+  float sdSphere( vec3 p, float s )
+  {
+    return length(p)-s;
+  }
+  float sdCylinder( vec3 p, vec3 c )
+  {
+    return length(p.xz-c.xy)-c.z;
+  }
+  float sdCappedCylinder( vec3 p, vec2 h )
+  {
+    vec2 d = abs(vec2(length(p.xz),p.y)) - h;
+    return min(max(d.x,d.y),0.0) + length(max(d,0.0));
+  }
+  float sdTorus82( vec3 p, vec2 t )
+  {
+    vec2 q = vec2(length2(p.xz)-t.x,p.y);
+    return length8(q)-t.y;
+  }
+  float sdPlane( vec3 p)
+  {
+    return p.y;
+  }
+  
+  // smooth min
+  // reference: http://iquilezles.org/www/articles/smin/smin.htm
+  float smin(float a, float b, float k) {
+      float res = exp(-k*a) + exp(-k*b);
+      return -log(res)/k;
+  }
+  
+  vec3 random3( vec3 p ) {
+      return fract(sin(vec3(dot(p,vec3(127.1,311.7,319.8)),dot(p,vec3(269.5,183.3, 415.2)),dot(p,vec3(362.9,201.5,134.7))))*43758.5453);
+  }
+  vec2 random2( vec2 p ) {
+      return fract(sin(vec2(dot(p,vec2(127.1,311.7)),dot(p,vec2(269.5,183.3))))*43758.5453);
+  }
+  
+  // The world!
+  float world_sdf(in vec3 p) {
+    float world = 10.;
+    
+    vec2 pxy = p.xy;
+    float pz = p.z;
+    float delta = pz * .3;
+    float s = sin(delta);
+    float c = cos(delta);
+    mat2 rot = mat2(c, -s, s, c);
+    
+    p.z = mod(p.z, 1.5) - .75;
+    p.xy *= rot;
+    // p.z = mod(p.z, 2.) - 1.;
+    
+    float path = path(u_time).z;
+    float animation = smoothstep(-2., -1.5, path - pz + p.z); // Adding the p.z here to make the doors appear solid
+    
+    const float wallWidth = .02;
+    const float doorWidth = .23;
+    
+    world = udBox(p, vec3(5.,10.,wallWidth)); // wall
+    world = min(world, udBox(p + vec3(0., .5, 0.), vec3(5., .05, wallWidth + .015))); // baseboard
+    // world = min(world, length(max(abs(p.yz)-vec2(.05, wallWidth + .015),0.0)));
+    world = max(world, -sdBox(p, vec3(doorWidth,.5,1.))); // doorframe
+    world = min(world, p.y + .5); // floor
+    // world = min(world, length(p.zy + vec2(.2))-.05);
+    
+    const float RAD90 = 1.5708;
+    const float cospi = cos(PI);
+    const float sinpi = sin(PI);
+    const float cosrad90 = cos(RAD90);
+    const float sinrad90 = sin(RAD90*1.1);
+    c = mix(cospi, cosrad90, animation);
+    s = mix(sinpi, sinrad90, animation);
+    
+    // Door
+    vec3 doorP = p;
+    doorP.xz *= mat2(c, -s, s, c);
+    doorP.x += mix(0.001, doorWidth - .005, animation);
+    doorP.z += mix(0., doorWidth - .005, animation);
+    world = min(world, sdBox(doorP, vec3(doorWidth -.005,.5-.005,wallWidth)));
+    
+    // Plate
+    vec3 plateoffset = vec3(0., -.2, 0.);
+    vec2 plateUV = doorP.xy * vec2(-3., 3.) + .5 + plateoffset.xy * 3.;
+    float t = 1. - texture2D(u_plate, plateUV).x;
+    world = min(world, sdBox(doorP + plateoffset, vec3(doorWidth*.8,.1,wallWidth+.01 * t + .005)));
+    
+    // Door handle
+    doorP.x += .12;
+    doorP.z -= .05;
+    doorP.y += .05;
+    world = min(world, sdSphere(doorP, .03));
+    
+    
+    return world;
+  }
+  
+  // Fuck yeah, normals!
+  vec3 calculate_normal(in vec3 p)
+  {
+    const vec3 small_step = vec3(0.0001, 0.0, 0.0);
+    
+    float gradient_x = world_sdf(vec3(p.x + eps, p.y, p.z)) - world_sdf(vec3(p.x - eps, p.y, p.z));
+    float gradient_y = world_sdf(vec3(p.x, p.y + eps, p.z)) - world_sdf(vec3(p.x, p.y - eps, p.z));
+    float gradient_z = world_sdf(vec3(p.x, p.y, p.z  + eps)) - world_sdf(vec3(p.x, p.y, p.z - eps));
+    
+    vec3 normal = vec3(gradient_x, gradient_y, gradient_z);
+
+    return normalize(normal);
+  }
+
+  // Raymarching.
+  float rayMarching( vec3 origin, vec3 dir, float start, float end, inout float field ) {
+    
+    float sceneDist = 1e4;
+    float rayDepth = start;
+    for ( int i = 0; i < maxIterations; i++ ) {
+      sceneDist = world_sdf( origin + dir * rayDepth ); // Distance from the point along the ray to the nearest surface point in the scene.
+
+      if (( sceneDist < stopThreshold ) || (rayDepth >= end)) {        
+        break;
+      }
+      // We haven't hit anything, so increase the depth by a scaled factor of the minimum scene distance.
+      rayDepth += sceneDist * stepScale;
+    }
+  
+    if ( sceneDist >= stopThreshold ) rayDepth = end;
+    else rayDepth += sceneDist;
+      
+    // We've used up our maximum iterations. Return the maximum distance.
+    return rayDepth;
+  }
+
+  // Based on original by IQ - optimized to remove a divide
+  float calculateAO(vec3 p, vec3 n)
+  {
+     const float AO_SAMPLES = 5.0;
+     float r = 0.0;
+     float w = 1.0;
+     for (float i=1.0; i<=AO_SAMPLES; i++)
+     {
+        float d0 = i * 0.15; // 1.0/AO_SAMPLES
+        r += w * (d0 - world_sdf(p + n * d0));
+        w *= 0.5;
+     }
+     return 1.0-clamp(r,0.0,1.0);
+  }
+  
+  /**
+   * Lighting
+   * This stuff is way way better than the model I was using.
+   * Courtesy Shane Warne
+   * Reference: http://raymarching.com/
+   * -------------------------------------
+   * */
+  
+  // Lighting.
+  vec3 lighting( vec3 sp, vec3 camPos, int reflectionPass, float dist, float field, vec3 rd) {
+    
+    // Start with black.
+    vec3 sceneColor = vec3(0.0);
+
+    vec3 objColor = vec3(1.);
+
+    // Obtain the surface normal at the scene position "sp."
+    vec3 surfNormal = calculate_normal(sp);
+
+    // Lighting.
+
+    // lp - Light position. Keeping it in the vacinity of the camera, but away from the objects in the scene.
+    vec3 lp = vec3(-0., .3, -1.) + movement;
+    // ld - Light direction.
+    vec3 ld = lp-sp;
+    // lcolor - Light color.
+    vec3 lcolor = vec3(1.,0.97,0.92) * .5;
+    
+     // Light falloff (attenuation).
+    float len = length( ld ); // Distance from the light to the surface point.
+    ld /= len; // Normalizing the light-to-surface, aka light-direction, vector.
+    // float lightAtten = min( 1.0 / ( 0.15*len*len ), 1.0 ); // Removed light attenuation for this because I want the fade to white
+    
+    float sceneLen = length(camPos - sp); // Distance of the camera to the surface point
+    float sceneAtten = min( 1.0 / ( 0.015*sceneLen*sceneLen ), 1.0 ); // Keeps things between 0 and 1.   
+
+    // Obtain the reflected vector at the scene position "sp."
+    vec3 ref = reflect(-ld, surfNormal);
+    
+    float ao = 1.0; // Ambient occlusion.
+    // ao = calculateAO(sp, surfNormal); // Ambient occlusion.
+
+    float ambient = .3; //The object's ambient property.
+    float specularPower = 10.; // The power of the specularity. Higher numbers can give the object a harder, shinier look.
+    float diffuse = max( 0.0, dot(surfNormal, ld) ); //The object's diffuse value.
+    float specular = max( 0.0, dot( ref, normalize(camPos-sp)) ); //The object's specular value.
+    specular = pow(specular, specularPower); // Ramping up the specular value to the specular power for a bit of shininess.
+    	
+    // Bringing all the lighting components togethr to color the screen pixel.
+    sceneColor += (objColor*(diffuse*0.8+ambient)+specular*0.5)*lcolor*1.3;
+    sceneColor = mix(sceneColor, vec3(1.), 1.-sceneAtten*sceneAtten); // fog
+    
+    return sceneColor;
+
+  }
+
+    void main() {
+      
+      // Setting up our screen coordinates.
+      vec2 aspect = vec2(u_resolution.x/u_resolution.y, 1.0); //
+      vec2 uv = (2.0*gl_FragCoord.xy/u_resolution.xy - 1.0)*aspect;
+      
+      // This just gives us a touch of fisheye
+      // uv *= 1. + dot(uv, uv) * 0.4;
+      
+      // movement
+      movement = path(u_time);
+      
+      // The sin in here is to make it look like a walk.
+      vec3 lookAt = vec3(-0., 0.2, 1.);  // This is the point you look towards, or at, if you prefer.
+      vec3 camera_position = vec3(0., 0., -1.0); // This is the point you look from, or camera you look at the scene through. Whichever way you wish to look at it.
+      
+      lookAt += movement;
+      // lookAt.z += sin(u_time / 10.) * .5;
+      // lookAt.x += cos(u_time / 10.) * .5;
+      camera_position += movement;
+      
+      vec3 forward = normalize(lookAt-camera_position); // Forward vector.
+      vec3 right = normalize(vec3(forward.z, 0., -forward.x )); // Right vector... or is it left? Either way, so long as the correct-facing up-vector is produced.
+      vec3 up = normalize(cross(forward,right)); // Cross product the two vectors above to get the up vector.
+
+      // FOV - Field of view.
+      float FOV = 0.6;
+
+      // ro - Ray origin.
+      vec3 ro = camera_position; 
+      // rd - Ray direction.
+      vec3 rd = normalize(forward + FOV*uv.x*right + FOV*uv.y*up);
+      
+      // Ray marching.
+      const float clipNear = 0.0;
+      const float clipFar = 8.0;
+      float field = 0.;
+      float dist = rayMarching(ro, rd, clipNear, clipFar, field );
+      if ( dist >= clipFar ) {
+        gl_FragColor = vec4(vec3(1.), 1.0);
+        return;
+      }
+
+      // sp - Surface position. If we've made it this far, we've hit something.
+      vec3 sp = ro + rd*dist;
+
+      // Light the pixel that corresponds to the surface position. The last entry indicates that it's not a reflection pass
+      // which we're not up to yet.
+      vec3 sceneColor = lighting( sp, camera_position, 0, dist, field, rd);
+
+      // Clamping the lit pixel, then put it on the screen.
+      gl_FragColor = vec4(clamp(sceneColor, 0.0, 1.0), 1.0);
+
+
+    }
+</script>
+
+
+  <div id="container" touch-action="none"></div>
+
+  <div class="message">
+    <h2 style="color: white;">Access denied</h2>
+      <p style="color: white;">All doors are closing</p>
+      <p style="color: white;">Goodbye.</p>
+  </div>
+
+  <script src="./script.js"></script>
+
+</body>
+
+</html>

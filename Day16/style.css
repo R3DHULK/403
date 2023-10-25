@@ -1,0 +1,109 @@
+* {
+  box-sizing: border-box;
+}
+body {
+  background: #111;
+  min-height: 100vh;
+  overflow-x: auto;
+}
+.staff {
+  -webkit-animation: strike 0.5s 0.5s cubic-bezier(1, 0.25, 1, 1) both;
+          animation: strike 0.5s 0.5s cubic-bezier(1, 0.25, 1, 1) both;
+  bottom: 15vh;
+  height: 100vh;
+  left: 50%;
+  position: absolute;
+  transform: translate(15%, 0);
+  width: 200px;
+}
+.shine {
+  -webkit-animation: flash 2s 1s ease;
+          animation: flash 2s 1s ease;
+  background: #fff;
+  bottom: 0;
+  left: 0;
+  opacity: 0;
+  position: fixed;
+  right: 0;
+  top: 0;
+}
+.text {
+  -webkit-animation-name: shake;
+          animation-name: shake;
+  -webkit-animation-iteration-count: 20;
+          animation-iteration-count: 20;
+  -webkit-animation-timing-function: ease;
+          animation-timing-function: ease;
+  -webkit-animation-delay: 1s;
+          animation-delay: 1s;
+  -webkit-animation-duration: 0.1s;
+          animation-duration: 0.1s;
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translate(-100%, -50%);
+  width: 150px;
+}
+@media (min-width: 768px) {
+  .text {
+    width: 300px;
+  }
+}
+.text * {
+  fill: #fff;
+  stroke: #fff;
+}
+@-webkit-keyframes flash {
+  0% {
+    opacity: 0.85;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  75%, 100% {
+    opacity: 0;
+  }
+}
+@keyframes flash {
+  0% {
+    opacity: 0.85;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  75%, 100% {
+    opacity: 0;
+  }
+}
+@-webkit-keyframes strike {
+  from {
+    transform: translate(15%, -100%);
+  }
+}
+@keyframes strike {
+  from {
+    transform: translate(15%, -100%);
+  }
+}
+@-webkit-keyframes shake {
+  0%, 50%, 100% {
+    transform: translate(-100%, -50%);
+  }
+  25% {
+    transform: translate(-102%, -52%);
+  }
+  75% {
+    transform: translate(-98%, -48%);
+  }
+}
+@keyframes shake {
+  0%, 50%, 100% {
+    transform: translate(-100%, -50%);
+  }
+  25% {
+    transform: translate(-102%, -52%);
+  }
+  75% {
+    transform: translate(-98%, -48%);
+  }
+}
